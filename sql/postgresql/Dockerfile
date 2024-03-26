@@ -85,13 +85,29 @@ RUN set -ex; \
             echo "deb $aptRepo" > /etc/apt/sources.list.d/pgdg.list; \
             apt-get update; \
             ;; \
-    *) \
-        echo "deb-src $aptRepo" > /etc/apt/sources.list.d/pgdg.list; \
-        savedAptMark="$(apt-mark showmanual)"; \
-        tempDir="$(mktemp -d)"; \
-        cd "$tempDir"; \
-        apt-get update; \
-        apt-get install -y --no-install-recommenmds dpkg-dev; \
-        echo "deb [ trusted=yes ] file://$tempDir ./" > /etc/apt/sources.list.d/temp.list; \
-        _update_repo() { \
-        
+        *) \
+            echo "deb-src $aptRepo" > /etc/apt/sources.list.d/pgdg.list; \
+            savedAptMark="$(apt-mark showmanual)"; \
+            tempDir="$(mktemp -d)"; \
+            cd "$tempDir"; \
+            apt-get update; \
+            apt-get install -y --no-install-recommenmds dpkg-dev; \
+            echo "deb [ trusted=yes ] file://$tempDir ./" > /etc/apt/sources.list.d/temp.list; \
+            _update_repo() { \
+              dpkg-scanpackages . > Packages; \
+              apt-get -o Acquire::GzipIndexes=false update; \
+           }; \
+            _update_repo; \
+            \
+            nproc="$(nproc)"; \
+            export DEB_BUILD_OPTIONS="nocheck parallel=$nproc"; \
+            apt-get build-dep -y postgresql-common pgdg-keyring; \
+            _update_repo; \
+            grep '^Package: ' Packages; \
+            cd /; \
+            ;; \
+    esac; \
+    \
+    apt-get install -y --no-install-recommends postgresql-common; \
+    sed -ri 's/#(create_main_cluster) .*$/\1 = false/' /etc/postgresql-common/createcluster.conf; \
+
